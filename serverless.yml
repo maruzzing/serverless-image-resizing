@@ -1,0 +1,92 @@
+plugins:
+  - serverless-dotenv-plugin
+  - "@silvermine/serverless-plugin-cloudfront-lambda-edge"
+
+useDotenv: true
+
+package:
+  excludeDevDependencies: true
+  patterns:
+    - src/**
+    - node_modules/**
+    - "!node_modules/aws-sdk/**"
+
+custom:
+  bucketName: image-resizer-test-2
+
+service: image-resizer-test
+
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  versionFunctions: true
+
+functions:
+  imageResize:
+    name: image-resizer
+    handler: src/handler.handler
+    role: ${env.EDGE_LAMBDA_ROLE_ARN}
+    memorySize: 256
+    timeout: 30
+    lambdaAtEdge:
+      distribution: ImageResizeDistribution
+      eventType: "origin-response"
+      pathPattern: "images*"
+
+resources:
+  Resources:
+    ImageResizeDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Origins:
+            - DomainName: ${self:custom.bucketName}.s3.amazonaws.com
+              Id: S3Origin
+              S3OriginConfig:
+                OriginAccessIdentity: ""
+              OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
+          Enabled: "true"
+          CacheBehaviors:
+            - PathPattern: "images*"
+              TargetOriginId: S3Origin
+              ViewerProtocolPolicy: "https-only"
+              ForwardedValues:
+                QueryString: true
+                QueryStringCacheKeys:
+                  - "h"
+                  - "w"
+                  - "q"
+                  - "f"
+          DefaultCacheBehavior:
+            TargetOriginId: S3Origin
+            ViewerProtocolPolicy: "https-only"
+            ForwardedValues:
+              QueryString: true
+            AllowedMethods: [HEAD, GET]
+            CachedMethods: [HEAD, GET]
+          HttpVersion: "http2"
+    OriginBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: ${self:custom.bucketName}
+        PolicyDocument:
+          Statement:
+            - Action: s3:GetObject
+              Effect: Allow
+              Resource: !Sub arn:aws:s3:::${self:custom.bucketName}/*
+              Principal:
+                Service: cloudfront.amazonaws.com
+              Condition:
+                StringEquals:
+                  AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${ImageResizeDistribution}
+    CloudFrontOriginAccessControl:
+      Type: AWS::CloudFront::OriginAccessControl
+      Properties:
+        OriginAccessControlConfig:
+          Description: Default Origin Access Control
+          Name: !Ref AWS::StackName
+          OriginAccessControlOriginType: s3
+          SigningBehavior: always
+          SigningProtocol: sigv4
