@@ -1,5 +1,4 @@
 plugins:
-  - serverless-dotenv-plugin
   - "@silvermine/serverless-plugin-cloudfront-lambda-edge"
 
 useDotenv: true
@@ -12,9 +11,9 @@ package:
     - "!node_modules/aws-sdk/**"
 
 custom:
-  bucketName: image-resizer-test-2
+  bucketName: image-resizer-origin-s3
 
-service: image-resizer-test
+service: image-resizer-ex
 
 frameworkVersion: "3"
 
@@ -25,9 +24,9 @@ provider:
 
 functions:
   imageResize:
-    name: image-resizer
+    name: image-resizer-ex
     handler: src/handler.handler
-    role: ${env.EDGE_LAMBDA_ROLE_ARN}
+    role: !Sub arn:aws:iam::${AWS::AccountId}:role/ImageResizer
     memorySize: 256
     timeout: 30
     lambdaAtEdge:
@@ -51,7 +50,7 @@ resources:
           CacheBehaviors:
             - PathPattern: "images*"
               TargetOriginId: S3Origin
-              ViewerProtocolPolicy: "https-only"
+              ViewerProtocolPolicy: "allow-all"
               ForwardedValues:
                 QueryString: true
                 QueryStringCacheKeys:
@@ -61,7 +60,7 @@ resources:
                   - "f"
           DefaultCacheBehavior:
             TargetOriginId: S3Origin
-            ViewerProtocolPolicy: "https-only"
+            ViewerProtocolPolicy: "allow-all"
             ForwardedValues:
               QueryString: true
             AllowedMethods: [HEAD, GET]
@@ -74,6 +73,7 @@ resources:
         PolicyDocument:
           Statement:
             - Action: s3:GetObject
+              Sid: "AllowCloudFrontServicePrincipalReadOnly"
               Effect: Allow
               Resource: !Sub arn:aws:s3:::${self:custom.bucketName}/*
               Principal:

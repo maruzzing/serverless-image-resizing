@@ -5,7 +5,7 @@ const querystring = require("querystring");
 const Sharp = require("sharp");
 
 const S3 = new AWS.S3({ region: "ap-northeast-2" });
-const BUCKET = "image-resizer-test-2";
+const BUCKET = "image-resizer-origin-s3";
 
 const supportImageTypes = ["jpg", "jpeg", "png", "gif", "webp", "svg", "tiff"];
 
@@ -24,8 +24,8 @@ module.exports.handler = async (event, context, callback) => {
 
   if (!supportImageTypes.some((type) => type === extension)) {
     updateResponse({
-      status: 403,
-      statusDescription: "Forbidden",
+      status: 400,
+      statusDescription: "Bad Request",
       contentHeader: [{ key: "Content-Type", value: "text/plain" }],
       body: "Unsupported image type",
     });
@@ -91,7 +91,7 @@ module.exports.handler = async (event, context, callback) => {
   const resizedImageByteLength = Buffer.byteLength(resizedImage, "base64");
   console.log("byteLength: ", resizedImageByteLength);
 
-  // `response.body`가 변경된 경우 1MB까지만 허용됩니다.
+  // `response.body`가 변경된 경우 1MB까지만 허용됨.
   if (resizedImageByteLength >= 1 * 1024 * 1024) {
     return callback(null, response);
   }
